@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     StudyScheduleViewSet,
     StudyResourceViewSet,
@@ -23,7 +24,6 @@ from .views import (
     StudyReminderViewSet,
 )
 
-# Create a router and register our viewsets with it.
 router = DefaultRouter()
 router.register(r'study-schedule', StudyScheduleViewSet)
 router.register(r'study-resources', StudyResourceViewSet)
@@ -46,7 +46,9 @@ router.register(r'course/grades', CourseGradeViewSet)
 router.register(r'study-plan/adjust', StudyPlanAdjustmentViewSet)
 router.register(r'study-reminder/notifications', StudyReminderViewSet)
 
-# The API URLs are now determined automatically by the router.
 urlpatterns = [
+    path('api/', include(router.urls)),
     path('', include(router.urls)),
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
