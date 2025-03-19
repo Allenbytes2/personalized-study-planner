@@ -1,6 +1,5 @@
-from datetime import timedelta
-from django.db.models import Q
-from django.utils import timezone
+from datetime import date, timedelta
+from django.db.models import Sum, Avg, Count, Q
 from .models import (
     StudySchedule,
     StudyResource,
@@ -24,175 +23,145 @@ from .models import (
     StudyReminder,
 )
 
-# Service for creating personalized study schedule
-def generate_study_schedule(user, available_hours, exam_dates, assignment_due_dates):
-    # Generate a personalized study schedule based on user inputs (exam dates, assignment dates, and available study hours)
-    study_schedule = []
-    for date in exam_dates:
-        schedule = StudySchedule.objects.create(
-            user=user,
-            study_date=date,
-            study_hours=available_hours,
-            subjects="Math, Science",  # Example, you can calculate subjects based on context
-        )
-        study_schedule.append(schedule)
-    return study_schedule
+# 1. Generate a Personalized Study Schedule
+def generate_study_schedule(user, available_hours, exam_dates=None):
+    """
+    Generates a personalized study schedule based on exam dates, assignment due dates, and available hours.
+    """
+    # Fetch upcoming exams and prioritize subjects accordingly
+    upcoming_exams = ExamAlert.objects.filter(user=user, exam_date__gte=date.today()).order_by('exam_date')
+    tasks = StudyTaskPriority.objects.filter(user=user).order_by('-urgency', '-difficulty')
 
-# Service to recommend study resources based on subject
+    schedule = []
+    remaining_hours = available_hours
+
+    for exam in upcoming_exams:
+        allocated_hours = min(remaining_hours, exam.exam_date - date.today().days * 2)  # Example logic
+        schedule.append({
+            'subject': exam.subject,
+            'exam_date': exam.exam_date,
+            'allocated_hours': allocated_hours,
+        })
+        remaining_hours -= allocated_hours
+
+    return schedule
+
+
+# 2. Recommend Study Resources
 def recommend_study_resources(subject):
-    return StudyResource.objects.filter(subject=subject)
+    """
+    Suggests study resources like books, articles, and videos tailored to the subject.
+    """
+    resources = StudyResource.objects.filter(subject=subject).order_by('?')[:5]  # Randomly select 5 resources
+    return [{'title': res.title, 'url': res.url, 'type': res.resource_type} for res in resources]
 
-# Service for Pomodoro timer configuration
-def configure_study_timer(user, study_duration, break_duration):
-    timer = StudyBreakTimer.objects.create(
-        user=user,
-        study_duration=study_duration,
-        break_duration=break_duration,
-    )
-    return timer
 
-# Service to track progress
-def track_study_progress(user, subject, duration, completed=False):
-    progress = StudyProgress.objects.create(
-        user=user,
-        subject=subject,
-        study_session_date=timezone.now().date(),
-        duration=duration,
-        completed=completed
-    )
-    return progress
+# 3. Analyze Study Progress
+def analyze_study_progress(user):
+    """
+    Tracks progress and completion of study sessions, providing insights into completed tasks.
+    """
+    progress = StudyProgress.objects.filter(user=user, completed=True)
+    total_sessions = progress.count()
+    total_duration = progress.aggregate(Sum('duration'))['duration__sum'] or 0
 
-# Service for sending exam reminders
-def set_exam_reminder(user, exam_date, reminder_time, subject):
-    reminder = ExamAlert.objects.create(
-        user=user,
-        exam_date=exam_date,
-        reminder_time=reminder_time,
-        subject=subject
-    )
-    return reminder
+    return {
+        'total_completed_sessions': total_sessions,
+        'total_study_duration_minutes': total_duration,
+    }
 
-# Service for providing study tips based on subject
-def get_study_tips(subject):
-    return StudyTip.objects.filter(subject=subject)
 
-# Service to prioritize study tasks based on urgency and difficulty
+# 4. Send Exam Alerts (Advanced Filtering)
+def send_exam_alerts(user):
+    """
+    Sends reminders about upcoming exams or assignment deadlines.
+    """
+    alerts = ExamAlert.objects.filter(user=user, reminder_time__lte=date.today() + timedelta(days=7))
+    return [{'subject': alert.subject, 'exam_date': alert.exam_date} for alert in alerts]
+
+
+# 5. Provide Study Tips (Advanced Filtering)
+def get_study_tips(subject, difficulty_level):
+    """
+    Provides study tips based on the subject or difficulty level chosen by the user.
+    """
+    tips = StudyTip.objects.filter(Q(subject=subject) | Q(subject='general')).filter(difficulty_level__lte=difficulty_level)
+    return [{'tip': tip.tip} for tip in tips]
+
+
+# 6. Prioritize Study Tasks
 def prioritize_study_tasks(user):
-    tasks = StudyTaskPriority.objects.filter(user=user)
-    prioritized_tasks = sorted(tasks, key=lambda x: (x.urgency, x.difficulty), reverse=True)
-    return prioritized_tasks
+    """
+    Helps prioritize study tasks based on urgency and difficulty.
+    """
+    tasks = StudyTaskPriority.objects.filter(user=user).order_by('-urgency', '-difficulty')
+    return [{'task': task.task_description, 'urgency': task.urgency, 'difficulty': task.difficulty} for task in tasks]
 
-# Service to suggest subjects based on user's performance
-def suggest_subject_based_on_performance(user):
-    grades = CourseGrade.objects.filter(user=user)
-    # Example logic: Suggest subjects where the user has low grades
-    low_performance_subjects = grades.filter(grade__in=["D", "E", "F"])
-    suggestions = []
-    for grade in low_performance_subjects:
-        suggestions.append(
-            SubjectSuggestion.objects.create(
-                user=user,
-                suggested_subject=grade.course_name,
-                reason="Low grade performance"
-            )
-        )
-    return suggestions
 
-# Service to track total study time
-def track_total_study_time(user):
-    study_sessions = StudyTracker.objects.filter(user=user)
-    total_study_time = sum(session.duration for session in study_sessions)
-    return total_study_time
+# 7. Suggest Subjects to Focus On
+def suggest_subjects(user):
+    """
+    Recommends subjects to focus on based on the user’s recent performance or grades.
+    """
+    recent_grades = CourseGrade.objects.filter(user=user).order_by('-created_at')[:3]
+    weak_subjects = [grade.course_name for grade in recent_grades if grade.grade in ['C', 'D', 'F']]
+    return weak_subjects
 
-# Service for sharing study notes
-def share_study_notes(user, subject, note_content):
-    note = StudyNote.objects.create(
-        user=user,
-        subject=subject,
-        note_content=note_content
-    )
-    return note
 
-# Service to create study challenges
-def create_study_challenge(user, description, start_date, end_date):
-    challenge = StudyChallenge.objects.create(
-        user=user,
-        challenge_description=description,
-        start_date=start_date,
-        end_date=end_date
-    )
-    return challenge
+# 8. Track Study Sessions (Advanced Aggregation)
+def track_study_sessions(user):
+    """
+    Logs completed study sessions and tracks total study time for effective time management.
+    """
+    total_study_time = StudyTracker.objects.filter(user=user).aggregate(Sum('duration'))['duration__sum'] or 0
+    most_studied_subject = StudyTracker.objects.filter(user=user).values('subject').annotate(
+        total_duration=Sum('duration')
+    ).order_by('-total_duration').first()
 
-# Service to generate random study prompts
-def generate_study_prompt(subject):
-    return StudyPrompt.objects.filter(subject=subject).order_by('?').first()
+    return {
+        'total_study_time_minutes': total_study_time,
+        'most_studied_subject': most_studied_subject['subject'] if most_studied_subject else None,
+    }
 
-# Service to recommend quizzes for self-assessment
-def recommend_quiz_for_subject(subject):
-    return Quiz.objects.filter(subject=subject)
 
-# Service for study reflection
-def study_reflection(user, strengths, areas_for_improvement):
-    reflection = StudyReflection.objects.create(
-        user=user,
-        reflection_date=timezone.now().date(),
-        strengths=strengths,
-        areas_for_improvement=areas_for_improvement
-    )
-    return reflection
+# 9. Generate Study Statistics
+def generate_study_statistics(user):
+    """
+    Generates insights into the user's study habits, such as total study hours and most studied topics.
+    """
+    stats = StudyStatistic.objects.filter(user=user).first()
+    return {
+        'total_study_hours': stats.total_study_hours if stats else 0,
+        'most_studied_subject': stats.most_studied_subject if stats else None,
+    }
 
-# Service to collect study feedback
-def collect_study_feedback(user, feedback_text):
-    feedback = StudyFeedback.objects.create(
-        user=user,
-        feedback_date=timezone.now().date(),
-        feedback_text=feedback_text
-    )
-    return feedback
 
-# Service to get motivational quotes
-def get_motivation():
-    return Motivation.objects.all().order_by('?').first()
+# 10. Adjust Study Plans Dynamically
+def adjust_study_plan(user, reason, new_constraints):
+    """
+    Automatically adjusts study plans based on changes to deadlines, exam dates, or user inputs.
+    """
+    StudyPlanAdjustment.objects.create(user=user, adjustment_reason=reason, adjusted_date=date.today())
+    schedules = StudySchedule.objects.filter(user=user, study_date__gte=date.today())
+    for schedule in schedules:
+        schedule.study_hours = new_constraints.get('hours', schedule.study_hours)
+        schedule.save()
 
-# Service to generate study statistics
-def get_study_statistics(user):
-    statistics = StudyStatistic.objects.filter(user=user).first()
-    if not statistics:
-        statistics = StudyStatistic.objects.create(user=user, total_study_hours=0, most_studied_subject="None")
-    return statistics
 
-# Service to track grades for a course
-def track_course_grades(user):
-    return CourseGrade.objects.filter(user=user)
+# 11. Generate Reflection Reports
+def generate_reflection_report(user, start_date, end_date):
+    """
+    Lets users reflect on their study sessions, identifying strengths and areas for improvement.
+    """
+    reflections = StudyReflection.objects.filter(user=user, reflection_date__range=[start_date, end_date])
+    feedback = StudyFeedback.objects.filter(user=user, feedback_date__range=[start_date, end_date])
 
-# Service to adjust study plans based on changes
-def adjust_study_plan(user, reason, adjusted_date):
-    adjustment = StudyPlanAdjustment.objects.create(
-        user=user,
-        adjustment_reason=reason,
-        adjusted_date=adjusted_date
-    )
-    return adjustment
+    strengths = [r.strengths for r in reflections]
+    areas_for_improvement = [r.areas_for_improvement for r in reflections]
+    feedback_text = [f.feedback_text for f in feedback]
 
-# Service to set study reminder notifications
-def set_study_reminder(user, reminder_date, reminder_time, message):
-    reminder = StudyReminder.objects.create(
-        user=user,
-        reminder_date=reminder_date,
-        reminder_time=reminder_time,
-        message=message
-    )
-    return reminder
-
-# Helper function to apply filtering for study resources
-def filter_study_resources_by_type(resource_type):
-    return StudyResource.objects.filter(resource_type=resource_type)
-
-# Helper function to calculate study schedule adjustments based on new input
-def adjust_schedule_for_new_deadlines(user, new_exam_dates, new_assignment_due_dates):
-    # Example logic: Update existing schedules for new deadlines
-    for schedule in StudySchedule.objects.filter(user=user):
-        if schedule.study_date in new_exam_dates or schedule.study_date in new_assignment_due_dates:
-            schedule.study_hours += 2  # Add 2 more hours for rescheduling
-            schedule.save()
-    return "Study schedule updated for new deadlines"
+    return {
+        'strengths': strengths,
+        'areas_for_improvement': areas_for_improvement,
+        'feedback': feedback_text,
+    }

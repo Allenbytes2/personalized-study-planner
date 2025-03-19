@@ -162,7 +162,7 @@ class StudyStatistic(models.Model):
 class CourseGrade(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     course_name = models.CharField(max_length=100)
-    grade = models.CharField(max_length=2)  # e.g., 'A', 'B+', etc.
+    grade = models.CharField(max_length=4)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -22,6 +22,17 @@ from .views import (
     CourseGradeViewSet,
     StudyPlanAdjustmentViewSet,
     StudyReminderViewSet,
+    generate_study_schedule_view,
+    recommend_study_resources_view,
+    analyze_study_progress_view,
+    send_exam_alerts_view,
+    get_study_tips_view,
+    prioritize_study_tasks_view,
+    suggest_subjects_view,
+    track_study_sessions_view,
+    adjust_study_plan_view,
+    generate_reflection_report_view,
+    motivation_view,
 )
 
 router = DefaultRouter()
@@ -47,10 +58,26 @@ router.register(r'study-plan/adjust', StudyPlanAdjustmentViewSet)
 router.register(r'study-reminder/notifications', StudyReminderViewSet)
 
 urlpatterns = [
+    # Default API routes
     path('api/', include(router.urls)),
     path('', include(router.urls)),
+
+    # JWT Authentication
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-]
 
-#message
+    # Custom Advanced Functionality Routes
+    path('api/study-schedule/generate/', generate_study_schedule_view, name='generate_study_schedule'),
+    path('api/study-resources/recommendations/', recommend_study_resources_view, name='recommend_study_resources'),
+    path('api/study-progress/analyze/', analyze_study_progress_view, name='analyze_study_progress'),
+    path('api/exam/alerts/upcoming/', send_exam_alerts_view, name='send_exam_alerts'),
+    path('api/study-tips/get/', get_study_tips_view, name='get_study_tips'),
+    path('api/study-planner/priority/tasks/', prioritize_study_tasks_view, name='prioritize_study_tasks'),
+    path('api/subject/suggestions/focus/', suggest_subjects_view, name='suggest_subjects'),
+    path('api/study-tracker/summary/', track_study_sessions_view, name='track_study_sessions'),
+    path('api/study-plan/adjust/', adjust_study_plan_view, name='adjust_study_plan'),
+    path('api/study-reflection/report/', generate_reflection_report_view, name='generate_reflection_report'),
+
+    # Motivation Random Quote Endpoint
+    path('api/motivation/random/', motivation_view, name='random_motivational_quote'),
+]
