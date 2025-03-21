@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -54,7 +55,7 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # Access token expires after 30 minutes
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),  # Access token expires after 30 minutes
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),     # Refresh token expires after 1 day
 }
 
@@ -131,7 +132,6 @@ USE_I18N = True
 
 USE_TZ = True
 
-APPEND_SLASH = False
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
@@ -141,3 +141,9 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+CORE_API_URL = "https://api.core.ac.uk/v3/search/works"
+CORE_API_KEY = "TyFMi4vGZ8Cb1nDlLuRBQJmzOtedEHXj"
+
+# Allow OAuth over HTTP during development
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
